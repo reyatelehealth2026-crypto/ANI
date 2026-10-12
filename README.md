@@ -96,7 +96,17 @@ MCP ไม่เรียก image/video provider และไม่จ่าย
 
 ### ติดตั้งเป็นปลั๊กอิน Claude Code
 
-repo นี้เป็นทั้ง plugin และ marketplace (`.claude-plugin/`) ติดตั้งให้ใช้ได้จากทุกโฟลเดอร์:
+repo นี้เป็นทั้ง plugin และ marketplace (`.claude-plugin/`) ติดตั้งให้ใช้ได้จากทุกโฟลเดอร์
+
+**เครื่องใหม่ (Windows) — คำสั่งเดียว** หลังติดตั้ง Python 3.12+, ffmpeg และ Claude Code:
+
+```powershell
+git clone https://github.com/reyatelehealth2026-crypto/ANI.git
+cd ANI
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+```
+
+สคริปต์สร้าง `.venv` ติดตั้ง requirements ตั้ง `ANI_ROOT` และติดตั้งปลั๊กอิน `ani@ani` ให้ ส่วน `.env` และการล็อกอิน Flow ต้องทำเองในแต่ละเครื่อง หรือติดตั้งเองทีละขั้น:
 
 ```text
 /plugin marketplace add reyatelehealth2026-crypto/ANI
