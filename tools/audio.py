@@ -85,12 +85,14 @@ def tts(project_dir: Path, project: dict, force: bool = False) -> list[Path]:
     done, failed = [], []
     for ev in ani.vo_events(project):
         out = project_dir / ev["file"]
-        if out.exists() and not force:
+        voice = project["voices"].get(ev["speaker"]) or project["voices"].get("narrator")
+        if not voice and name != "file":
+            raise SystemExit("ani: ไม่มี voices.narrator ใน project.json")
+        # provider "file" = user-supplied audio, nothing to regenerate from the text
+        if out.exists() and not force and (name == "file" or not ani.is_stale(
+                project_dir, f"vo:{ev['file']}", out, [name, ev["text"], voice, project["tts"]])):
             done.append(out)
             continue
-        voice = project["voices"].get(ev["speaker"]) or project["voices"].get("narrator")
-        if not voice:
-            raise SystemExit("ani: ไม่มี voices.narrator ใน project.json")
         try:
             fn(ev["text"], voice, out, cfg)
             done.append(out)
@@ -281,7 +283,8 @@ def music_file_cmd(src: Path, tmp: Path, total: float, project_dir: Path) -> lis
 def music(project_dir: Path, project: dict, force: bool = False) -> Path:
     out = project_dir / "07-audio" / "music.wav"
     out.parent.mkdir(parents=True, exist_ok=True)
-    if out.exists() and not force:
+    inputs = [project["providers"]["music"], project["music"], ani.music_sections(project)]
+    if out.exists() and not force and not ani.is_stale(project_dir, "music", out, inputs):
         print(f"[music] มี {media.rel(out, project_dir)} แล้ว (ใช้ --force เพื่อสร้างใหม่)")
         return out
     total = ani.total_seconds(project)

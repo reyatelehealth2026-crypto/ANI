@@ -21,6 +21,48 @@
         </div>
       </header>
 
+      <section class="flow-panel" aria-labelledby="flowTitle">
+        <div class="flow-heading"><div><p class="eyebrow">GOOGLE FLOW / AGENT</p><h2 id="flowTitle">เอเจนท์ดูแลการสร้างให้คุณ</h2></div><span id="flowBadge" class="state-chip">กำลังตรวจสถานะ</span></div>
+        <p id="agentMessage" role="status" aria-live="polite">กำลังอ่านสถานะ Flow…</p>
+        <p class="agent-instruction">พิมพ์ไอเดียที่ต้องการในแชตกับเอเจนท์ เอเจนท์จะออกแบบฉาก สร้างภาพและคลิป แล้วนำผลลัพธ์กลับมาแสดงที่นี่</p>
+        <details class="agent-settings"><summary>ตั้งค่าการเชื่อมต่อและการทำงาน</summary>
+        <div class="agent-policy">
+          <label><input id="agentAuto" type="checkbox"> ให้เอเจนท์ทำงานอัตโนมัติภายในวงเงินที่บันทึก</label>
+          <label class="flow-label" for="agentBudget">วงเงินรวมต่อคำสั่ง (เครดิต)</label>
+          <input id="agentBudget" type="number" min="0" max="10000" step="1" value="10">
+          <button id="agentSavePolicy" type="button">บันทึกการทำงาน</button>
+          <p class="flow-hint">ใช้วงเงินนี้ร่วมกันทั้งภาพและคลิปของเรื่องใหม่ ไม่ถามซ้ำทุกฉาก เอเจนท์หยุดก่อนส่งงานเมื่อเกินวงเงินหรืออ่านราคาไม่ได้</p>
+        </div>
+        <label class="flow-label" for="flowUrl">URL โปรเจกต์ Google Flow</label>
+        <input id="flowUrl" type="url" placeholder="https://flow.google.com/.../project/..." autocomplete="off">
+        <div class="flow-actions">
+          <button id="flowExisting" type="button">ใช้ Chrome ที่เปิดอยู่</button>
+          <button id="flowLogin" type="button">เปิด Chrome เพื่อล็อกอิน</button>
+          <label class="flow-file">นำเข้า cookies .txt / .json<input id="flowCookies" type="file" accept=".txt,.json,text/plain,application/json"></label>
+          <button id="flowCheck" type="button">บันทึก URL และตรวจสอบล็อกอิน</button>
+        </div>
+        <details class="flow-hint"><summary>วิธีใช้ Chrome ที่ล็อกอิน Flow อยู่แล้ว</summary><p>เปิด <code>chrome://inspect/#remote-debugging</code> ใน Chrome ที่มีแท็บ Flow แล้วเปิด Remote debugging จากนั้นกดใช้ Chrome ที่เปิดอยู่ และกด Allow เมื่อ Chrome ถามอนุญาต ระบบจะใช้แท็บ Flow เดิม การอนุญาตนี้ให้ ANI ควบคุม Chrome โปรไฟล์นั้นได้</p><label for="flowEndpoint">การเชื่อมต่อ Chrome (ปกติใช้ auto)</label><input id="flowEndpoint" value="auto" autocomplete="off"></details>
+        <p class="flow-hint">กรอกรหัสผ่านและยืนยัน Google ในหน้าต่าง Chrome ด้วยตัวเอง • รองรับ Netscape cookies.txt, JSON array และ Playwright storageState • cookies ที่หมดอายุอาจต้องล็อกอินใหม่</p>
+        <p id="flowMessage" role="status" aria-live="polite">กำลังตรวจการเชื่อมต่อ…</p>
+        <p id="flowMode" class="flow-hint"></p>
+        <div class="flow-production">
+          <label class="flow-label" for="flowProject">เรื่องที่จะสร้าง</label>
+          <select id="flowProject"><option value="">ยังไม่มีโปรเจกต์</option></select>
+          <div class="flow-actions">
+            <button id="flowApply" type="button">ใช้ Flow สำหรับเรื่องที่เลือก</button>
+            <button id="flowPlanImages" type="button">ดูแผนสร้างภาพ</button>
+            <button id="flowPlanClips" type="button">ดูแผนสร้างคลิป</button>
+          </div>
+          <div id="flowPlan" hidden>
+            <p id="flowPlanSummary"></p>
+            <label><input id="flowApprove" type="checkbox"> ยืนยันสร้างฉากตามแผนและใช้เครดิตที่แสดง</label>
+            <button id="flowRun" type="button" disabled>เริ่มสร้างอัตโนมัติ</button>
+          </div>
+          <details id="flowJob" hidden><summary id="flowJobTitle">สถานะการสร้าง</summary><pre id="flowJobOutput"></pre></details>
+        </div>
+        </details>
+      </section>
+
       <section class="intro" aria-labelledby="pageTitle">
         <div class="intro-copy">
           <p class="eyebrow">FILM PRODUCTION / OVERVIEW</p>
@@ -54,7 +96,7 @@
         </section>
       </main>
 
-      <footer class="page-footer"><span>ANI STUDIO / LOCAL DASHBOARD</span><span>READ ONLY · FROM PROJECT.JSON &amp; MEDIA FILES</span></footer>
+      <footer class="page-footer"><span>ANI STUDIO / LOCAL DASHBOARD</span><span>PROJECT LIBRARY + FLOW AUTOMATION</span></footer>
     </div>
   </body>
 </html>

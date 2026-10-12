@@ -233,7 +233,18 @@ VIDEO_PROVIDERS = {"manual": vid_manual, "flow": vid_flow, "gemini": vid_gemini,
 
 # ---------------------------------------------------------------- stage runners
 def _cfg(project: dict, name: str, **extra) -> dict:
-    return {**project["provider_config"].get(name, {}), "video": project["video"], **extra}
+    cfg = dict(project["provider_config"].get(name, {}))
+    if name == 'flow' and (ani.ROOT / '.local' / 'flow.json').exists():
+        import flow_auth
+        local = flow_auth.settings(ani.ROOT)
+        for key in ('cdp', 'profile_dir', 'project_url'):
+            if not cfg.get(key) or cfg.get(key) == ani.DEFAULTS['provider_config']['flow'].get(key):
+                cfg[key] = local[key]
+        if cfg.get('profile_dir') == local['profile_dir']:
+            cfg['_cookie_store'] = local['_cookie_store']
+            cfg['browser_mode'] = local['browser_mode']
+            cfg['cdp'] = local['cdp']
+    return {**cfg, "video": project["video"], **extra}
 
 
 def _run_jobs(fn, jobs: list, parallel: bool) -> list[tuple]:
@@ -285,7 +296,7 @@ def generate_images(project_dir: Path, project: dict, scenes: list[str] | None =
         else:
             missing.append("reference")
     refs = [ref] if ref else []
-    jobs = [s for s in _select(project, scenes) if ani.scene_needs(project_dir, s, "image", force)]
+    jobs = [s for s in _select(project, scenes) if ani.scene_needs(project_dir, s, "image", force, project)]
 
     def one(s):
         out = project_dir / "03-images" / f"scene-{s['id']}.png"
@@ -325,7 +336,7 @@ def generate_clips(project_dir: Path, project: dict, scenes: list[str] | None = 
         raise SystemExit(f"ani: providers.video '{name}' ไม่รู้จัก — เลือกจาก {', '.join(VIDEO_PROVIDERS)}")
     jobs = []
     for s in _select(project, scenes):
-        if not ani.scene_needs(project_dir, s, "clip", force):
+        if not ani.scene_needs(project_dir, s, "clip", force, project):
             continue
         img = ani.find_asset(project_dir, "image", s["id"])
         if not img:
@@ -376,7 +387,7 @@ def collect(project_dir: Path, project: dict, kind: str, src_dir: Path, hours: f
     if kind not in KINDS:
         raise SystemExit("ani: collect ต้องระบุ images หรือ clips")
     akind, exts, folder = KINDS[kind]
-    missing = [s["id"] for s in project["scenes"] if ani.scene_needs(project_dir, s, akind)]
+    missing = [s["id"] for s in project["scenes"] if ani.scene_needs(project_dir, s, akind, project=project)]
     if not missing:
         print(f"[collect] {kind} ครบทุกฉากแล้ว — ใช้ `mark <id> {akind}=redo` ถ้าต้องการแทนที่")
         return []

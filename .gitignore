@@ -3,6 +3,7 @@
 !.env.example
 .claude/settings.local.json
 .venv/
+.local/
 venv/
 .uv-cache/
 .uv-python/
@@ -20,6 +21,7 @@ __pycache__/
 /*/project.json
 /*/status.md
 /*/.collect.log
+/*/.ani-inputs.json*
 /*/01-story/
 /*/02-reference/
 /*/03-images/

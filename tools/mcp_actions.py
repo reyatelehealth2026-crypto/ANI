@@ -137,16 +137,21 @@ def plan_media(root: Path, slug: str, kind: str, force: bool = False) -> dict:
     asset_kind = "image" if kind == "images" else "clip"
     jobs = []
     for scene in project["scenes"]:
-        if ani.scene_needs(directory, scene, asset_kind, force):
+        if ani.scene_needs(directory, scene, asset_kind, force, project):
             jobs.append({"scene_id": scene["id"], "title": scene.get("title", ""),
                          "prompt": ani.image_prompt(project, scene) if kind == "images"
                          else ani.motion_prompt(project, scene),
                          "source_image": str(ani.find_asset(directory, "image", scene["id"]))
                          if kind == "clips" and ani.find_asset(directory, "image", scene["id"]) else None})
     provider = project["providers"][asset_kind if kind == "images" else "video"]
+    import agent_workflow
+    policy = agent_workflow.status(root)['policy']
+    standing_budget = provider == 'flow' and policy['enabled']
     return {"slug": slug, "kind": kind, "provider": provider, "jobs": jobs,
-            "needs_approval": provider != "manual",
-            "cost_note": "ราคา/เครดิตขึ้นกับ provider และรุ่นที่เลือก ตรวจราคาปัจจุบันและขออนุมัติก่อนสร้างจริง"
+            "needs_approval": provider != "manual" and not standing_budget,
+            "standing_budget": policy if standing_budget else None,
+            "cost_note": 'อ่านราคา Flow และจองเครดิตด้วย reserve_agent_generation ก่อนส่งงาน ไม่ถามซ้ำภายในวงเงิน' if standing_budget else
+            "ราคา/เครดิตขึ้นกับ provider และรุ่นที่เลือก ตรวจราคาปัจจุบันและขออนุมัติก่อนสร้างจริง"
             if provider != "manual" else "manual: ไม่มีค่า API จากเครื่องมือนี้"}
 
 

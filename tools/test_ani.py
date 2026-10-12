@@ -50,6 +50,39 @@ class TimelineTests(unittest.TestCase):
             [("calm", 0, 7.5), ("threat", 7.5, 15), ("resolve", 15, 22.5), ("climax", 22.5, 30), ("resolution", 30, 38)])
 
 
+class RootTests(unittest.TestCase):
+    def test_project_root(self):
+        clone = Path("C:/src/ANI/tools")
+        cache = Path.home() / ".claude/plugins/cache/ani/ani/0.2.0/tools"
+        self.assertEqual(ani.project_root({}, clone), clone.parent)
+        self.assertEqual(ani.project_root({}, cache), Path.home() / "ANI")
+        self.assertEqual(ani.project_root({"ANI_ROOT": "~/films"}, cache), (Path.home() / "films").resolve())
+
+
+class StaleTests(unittest.TestCase):
+    def test_prompt_change_and_new_image_make_assets_stale(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            p = ani.apply_defaults(moonpetal())
+            s = p["scenes"][0]
+            for folder, name in (("03-images", "scene-01.png"), ("05-clips", "scene-01.mp4")):
+                (d / folder).mkdir()
+                (d / folder / name).write_bytes(b"x")
+            # first sighting = baseline (existing projects must not suddenly regenerate)
+            self.assertFalse(ani.scene_needs(d, s, "image", project=p))
+            self.assertFalse(ani.scene_needs(d, s, "clip", project=p))
+            self.assertFalse(ani.scene_needs(d, s, "image", project=p))
+            s["image_prompt"] = "changed"
+            self.assertTrue(ani.scene_needs(d, s, "image", project=p))
+            self.assertFalse(ani.scene_needs(d, s, "image"))  # no project → legacy existence check
+            # regenerated image → image current again, clip built from the old image is stale
+            time.sleep(0.01)
+            (d / "03-images" / "scene-01.png").write_bytes(b"y")
+            os.utime(d / "03-images" / "scene-01.png", ns=(time.time_ns(), time.time_ns() + 10**9))
+            self.assertFalse(ani.scene_needs(d, s, "image", project=p))
+            self.assertTrue(ani.scene_needs(d, s, "clip", project=p))
+
+
 class ManifestTests(unittest.TestCase):
     def test_defaults_and_bad_mood(self):
         p = moonpetal(); p["scenes"][0]["mood"] = "weird"

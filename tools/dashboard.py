@@ -1,4 +1,4 @@
-"""Local, read-only dashboard for ANI projects."""
+"""Local project dashboard with explicit Flow session and generation actions."""
 from __future__ import annotations
 
 import json
@@ -194,6 +194,8 @@ def media_file(root: Path, slug: str, kind: str, scene_id: str | None = None) ->
 
 
 def make_handler(root: Path):
+    from flow_studio import FlowStudio
+    studio = FlowStudio(root)
     class DashboardHandler(BaseHTTPRequestHandler):
         def _json(self, value, status: int = 200, head_only: bool = False) -> None:
             body = json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
@@ -267,6 +269,8 @@ def make_handler(root: Path):
             parts = [unquote(part) for part in path.strip("/").split("/")]
             if parts == ["api", "projects"]:
                 return self._json(list_projects(root), head_only=head_only)
+            if parts == ['api', 'flow', 'status']:
+                return self._json(studio.status(), head_only=head_only)
             if len(parts) == 3 and parts[:2] == ["api", "projects"]:
                 try:
                     detail = project_detail(root, parts[2])
@@ -288,6 +292,31 @@ def make_handler(root: Path):
 
         def do_HEAD(self) -> None:
             self._route(head_only=True)
+
+        def do_POST(self) -> None:
+            host = self.headers.get('Host', '').lower()
+            hosts = {f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'}
+            if host not in hosts or self.headers.get('Origin') != f'http://{host}':
+                return self._json({'error': 'Origin ไม่ถูกต้อง'}, 403)
+            if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
+                return self._json({'error': 'ต้องเป็น application/json'}, 415)
+            try:
+                size = int(self.headers.get('Content-Length', '0'))
+                if not 0 < size <= 2 * 1024 * 1024:
+                    return self._json({'error': 'ไฟล์ต้องไม่เกิน 2 MB'}, 413)
+                data = json.loads(self.rfile.read(size))
+                if not isinstance(data, dict):
+                    raise ValueError('ข้อมูลต้องเป็น JSON object')
+                parts = urlsplit(self.path).path.strip('/').split('/')
+                if len(parts) != 3 or parts[:2] != ['api', 'flow']:
+                    return self._json({'error': 'ไม่พบคำสั่ง'}, 404)
+                result = studio.action(parts[2], data)
+                return self._json(result)
+            except (ValueError, SystemExit) as error:
+                return self._json({'error': str(error)}, 422)
+            except Exception:
+                # Playwright exceptions can include supplied cookie values.
+                return self._json({'error': 'เชื่อมต่อ Flow ไม่สำเร็จ ตรวจหน้าต่าง Chrome แล้วลองใหม่'}, 500)
 
     return DashboardHandler
 

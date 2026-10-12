@@ -6,6 +6,7 @@ Usage: python tools/ani.py <cmd> [--project DIR] [options]
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,18 @@ import time
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent
-ROOT = TOOLS_DIR.parent
+
+
+def project_root(env: dict = os.environ, tools_dir: Path = TOOLS_DIR) -> Path:
+    """Where stories, .env and .local live: $ANI_ROOT, else the clone — but never a plugin cache (wiped on update)."""
+    if env.get("ANI_ROOT"):
+        return Path(env["ANI_ROOT"]).expanduser().resolve()
+    if ".claude" in tools_dir.parts and "plugins" in tools_dir.parts:
+        return Path.home() / "ANI"
+    return tools_dir.parent
+
+
+ROOT = project_root()
 sys.path.insert(0, str(TOOLS_DIR))
 for _stream in (sys.stdout, sys.stderr):  # Windows console = cp1252 → Thai/arrows would crash print()
     if hasattr(_stream, "reconfigure"):
@@ -187,10 +199,47 @@ def retire_asset(project_dir: Path, kind: str, scene_id: str, keep: Path | None 
     return moved
 
 
-def scene_needs(project_dir: Path, scene: dict, kind: str, force: bool = False) -> bool:
+INPUTS_FILE = ".ani-inputs.json"
+
+
+def is_stale(project_dir: Path, key: str, out: Path, inputs) -> bool:
+    """True when `out` was built from different inputs than now. A file seen for the first time
+    (new project, freshly generated/collected) records a baseline and counts as current."""
+    path = Path(project_dir) / INPUTS_FILE
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        state = {}
+    fp = hashlib.sha1(json.dumps(inputs, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    stamp = [out.name, out.stat().st_mtime_ns]
+    rec = state.get(key)
+    if rec and rec.get("file") == stamp:
+        if rec.get("input") != fp:
+            print(f"[stale] {key}: input เปลี่ยนจากตอนสร้าง {out.name} → ทำใหม่")
+            return True
+        return False
+    state[key] = {"file": stamp, "input": fp}
+    tmp = path.with_name(INPUTS_FILE + ".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(path)
+    return False
+
+
+def asset_inputs(project_dir: Path, project: dict, scene: dict, kind: str) -> list:
+    if kind == "image":
+        return [image_prompt(project, scene)]
+    img = find_asset(project_dir, "image", scene["id"])  # new source image → clip is stale too
+    return [motion_prompt(project, scene), [img.name, img.stat().st_mtime_ns] if img else None]
+
+
+def scene_needs(project_dir: Path, scene: dict, kind: str, force: bool = False, project: dict | None = None) -> bool:
     if force or (scene.get("qc") or {}).get(kind) == "redo":
         return True
-    return find_asset(project_dir, kind, scene["id"]) is None
+    asset = find_asset(project_dir, kind, scene["id"])
+    if asset is None:
+        return True
+    return project is not None and is_stale(project_dir, f"{kind}:{scene['id']}", asset,
+                                            asset_inputs(project_dir, project, scene, kind))
 
 
 def reference_path(project_dir: Path, project: dict) -> Path | None:

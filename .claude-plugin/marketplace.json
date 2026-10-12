@@ -1,0 +1,14 @@
+{
+  "name": "ani",
+  "description": "ANI Studio — AI short-film pipeline for Claude Code",
+  "owner": {
+    "name": "ANI contributors"
+  },
+  "plugins": [
+    {
+      "name": "ani",
+      "source": "./",
+      "description": "ANI Studio â€” AI short-film pipeline with MCP tools, skill and local dashboard."
+    }
+  ]
+}

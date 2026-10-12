@@ -1,0 +1,15 @@
+{
+  "name": "ani",
+  "version": "0.2.0",
+  "description": "ANI Studio — create AI short films (story → images → clips → VO → mix) with MCP tools and a local dashboard.",
+  "author": { "name": "ANI contributors" },
+  "keywords": ["video", "animation", "short-film", "google-flow", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": {
+    "ani-studio": {
+      "command": "python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/tools/mcp_server.py"],
+      "timeout": 3600000
+    }
+  }
+}

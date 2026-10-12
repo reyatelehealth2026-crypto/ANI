@@ -8,7 +8,7 @@ description: ทำหนังสั้น/อนิเมชัน AI ใน�
 ## หลักการ
 - **LLM ทำ 3 อย่าง**: (1) เขียน/แก้ `project.json` (2) ดูภาพ QC 2 ภาพ แล้ว `mark` (3) ขอ ok เครดิตจาก user ก่อน `clips --yes` — provider `flow` ขับ Google Flow เองด้วย `tools/flow.py`
 - **สคริปต์ทำที่เหลือ**: contact sheet, frame grid, xfade, TTS, ดนตรี, ducking, loudness, ซับ, status — ห้ามเขียน ffmpeg เอง
-- ทุก stage **idempotent**: ข้ามฉากที่มี output แล้ว; ทำใหม่ด้วย `--scene <id> --force` หรือ `mark <id> image=redo|clip=redo`
+- ทุก stage **idempotent**: ข้ามฉากที่มี output และ input ไม่เปลี่ยน (แก้ prompt/บท → ทำเฉพาะฉากนั้นให้เอง, fingerprint ใน `.ani-inputs.json`); บังคับทำใหม่ด้วย `--scene <id> --force` หรือ `mark <id> image=redo|clip=redo`
 - เวลาทั้งหมดคำนวณจาก manifest: `start_i = Σ seconds − i·xfade`, VO = `start + offset` → เปลี่ยน xfade/ลำดับฉากแล้ว VO ยังตรง
 
 ## Workflow (เรื่องใหม่)

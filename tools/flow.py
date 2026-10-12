@@ -11,6 +11,7 @@ from __future__ import annotations
 import atexit
 import os
 import re
+import socket
 import subprocess
 import time
 import urllib.parse
@@ -79,6 +80,9 @@ def make(kind: str, prompt: str, out: Path, cfg: dict, page=None, attach=()) -> 
         print(f"[flow] {sid}: ทำต่องานที่ส่งไปแล้ว ({media}) — ไม่กด Generate ซ้ำ")
     else:
         cost = page.setup(kind)
+        limit = os.environ.get('ANI_FLOW_MAX_CREDITS')
+        if limit is not None and (cost is None or cost > int(limit) or (kind == 'clip' and cost == 0)):
+            raise SystemExit('ani: เครดิตเปลี่ยนหรืออ่านไม่ได้ — หยุดก่อนสร้าง กรุณาดูแผนและยืนยันใหม่')
         if not (cost == 0 and kind == "image") and not cfg.get("yes"):   # a clip showing 0 = misread price
             print(f"[flow] {sid}: Flow แจ้ง {cost if cost is not None else '?'} เครดิต/{kind} — ยังไม่กด; "
                   "แสดงรายการให้ user ok แล้วรันซ้ำด้วย --yes")
@@ -134,11 +138,26 @@ UI = {
     "download": "ดาวน์โหลดสื่อ",
     "original": "ขนาดดั้งเดิม",                   # 1K / 720p original; the other items are paid upscales
 }
+UI_EN = {**UI, 'settings': 'Settings trigger', 'model': 'Select model family',
+         'mode': {'image': 'Image', 'clip': 'Video'}, 'frames': 'Frames',
+         'cost': 'Generating will use', 'submit': 'Start generation',
+         'no_credit': 'Insufficient credits warning', 'clear': 'Clear prompt',
+         'ingredient': 'Add ingredients to the prompt box', 'start': 'Start',
+         'search': 'Search assets', 'title': 'Editable text',
+         'back': 'Back button to go to previous page', 'download': 'Download media',
+         'original': 'Original size'}
+SETTINGS_NAME = re.compile(r'^(?:' + re.escape(UI['settings']) + r'|Settings trigger)$')
+
+
+def wait_for_composer(page, timeout: int = 20000) -> None:
+    page.get_by_role('button', name=SETTINGS_NAME).wait_for(timeout=timeout)
+
+
 # tile identity: image tiles carry img[data-media-id]; video tiles only a cover src; pending tiles nothing
 TILE_KEYS_JS = """() => [...document.querySelectorAll('flow-tile-container')].map(t => {
   const i = t.querySelector('img'); return i ? (i.dataset.mediaId || i.src.split('?')[0]) : null; })"""
 COMPOSER_IMGS_JS = """() => { let n = document.querySelector('[contenteditable=true]');
-  while (n && !n.querySelector('button[aria-label="ทริกเกอร์การตั้งค่า"]')) n = n.parentElement;
+  while (n && !n.querySelector('button[aria-label="ทริกเกอร์การตั้งค่า"], button[aria-label="Settings trigger"]')) n = n.parentElement;
   return n ? [...n.querySelectorAll('img')].map(i => i.src) : []; }"""
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
@@ -148,11 +167,16 @@ class FlowPage:
 
     def __init__(self, page, cfg: dict):
         self.p, self.cfg, self.before = page, cfg, set()
+        self.ui = UI_EN if page.get_by_role('button', name='Settings trigger', exact=True).count() else UI
 
     def _button(self, name: str):
+        key = next((key for key, value in UI.items() if isinstance(value, str) and value == name), None)
+        name = self.ui.get(key, name)
         return self.p.get_by_role("button", name=name, exact=True)
 
     def _radio(self, label: str):
+        if self.ui is UI_EN:
+            label = {UI['mode']['image']: 'Image', UI['mode']['clip']: 'Video', UI['frames']: 'Frames'}.get(label, label)
         return self.p.get_by_role("radio", name=re.compile(re.escape(label) + "$"))
 
     def _tile(self, title: str):
@@ -172,7 +196,8 @@ class FlowPage:
     def _cost_line(self) -> str:
         """Price text read until two reads 0.5 s apart agree — a value still re-rendering never passes."""
         def read():
-            return next((x for x in self.p.locator("body").inner_text().splitlines() if UI["cost"] in x), "")
+            lines = self.p.locator('body').inner_text().splitlines()
+            return next((' '.join(lines[i:i + 3]) for i, line in enumerate(lines) if self.ui['cost'] in line), '')
         last = read()
         for _ in range(10):
             self.p.wait_for_timeout(500)
@@ -210,7 +235,10 @@ class FlowPage:
     def _pick(self, title: str) -> str | None:
         """Attach the asset titled `title` from the open picker; returns its media id when the grid shows it."""
         box = self.p.locator(".cdk-overlay-container")
-        box.get_by_role("textbox", name=UI["search"]).fill(title)
+        search = box.get_by_role('textbox')
+        if search.count() != 1:
+            raise SystemExit('ani: ช่องค้นหา asset ของ Flow ไม่ชัดเจน — ไม่เลือก asset')
+        search.fill(title)
         opt = box.get_by_role("option", name=re.compile(rf"^{re.escape(title)}(\s|$)"))
         for _ in range(20):                                 # search results arrive asynchronously
             if opt.count():
@@ -246,7 +274,8 @@ class FlowPage:
             raise RuntimeError("Flow ไม่ได้แนบ asset ที่เลือกไว้ในช่อง prompt")
         if self.p.locator("flow-pending-tile").count():
             raise RuntimeError("มีงานกำลังสร้างค้างในกริด — รอให้เสร็จก่อน ไม่งั้นจับคู่ผลลัพธ์ผิดฉาก")
-        if self._button(UI["no_credit"]).count() or not self._button(UI["submit"]).is_visible():
+        if (self._button(UI["no_credit"]).count() or not self._button(UI["submit"]).is_visible()
+                or not self._button(UI["submit"]).is_enabled()):
             raise SystemExit("ani: เครดิต Google Flow ไม่พอสำหรับงานนี้ — รอรีเฟรช/อัปเกรด หรือเปลี่ยนบัญชี")
 
     def submit(self) -> None:
@@ -279,7 +308,7 @@ class FlowPage:
 
     def _rename(self, key: str, name: str) -> None:
         self.p.locator(f"flow-tile-container {self._img_sel(key)}").first.click()
-        box = self.p.get_by_role("textbox", name=UI["title"])
+        box = self.p.get_by_role("textbox", name=self.ui["title"])
         box.fill(name)
         box.press("Enter")
         self._button(UI["back"]).click()
@@ -289,17 +318,41 @@ class FlowPage:
         p = self.p
         self._tile(media).first.locator("img").first.click()
         self._button(UI["download"]).click()
-        with p.expect_download(timeout=120000) as d:
-            p.get_by_role("menuitem", name=re.compile(UI["original"])).click()
-        dl = d.value
-        real = Path(out).with_suffix(Path(dl.suggested_filename).suffix or Path(out).suffix)
-        dl.save_as(real)
+        download_session = None
+        download_params = {}
+        if self.cfg.get('browser_mode') == 'existing':
+            download_session = p.context.new_cdp_session(p)
+            context_id = download_session.send('Target.getTargetInfo')['targetInfo'].get('browserContextId')
+            if context_id:
+                download_params['browserContextId'] = context_id
+            download_session.send('Browser.setDownloadBehavior', {
+                **download_params, 'behavior': 'allowAndName', 'downloadPath': str(Path(out).resolve().parent),
+                'eventsEnabled': True})
+        try:
+            with p.expect_download(timeout=120000) as d:
+                p.get_by_role("menuitem", name=re.compile(self.ui["original"])).click()
+            dl = d.value
+            real = Path(out).with_suffix(Path(dl.suggested_filename).suffix or Path(out).suffix)
+            dl.save_as(real)
+        finally:
+            if download_session:
+                try:
+                    download_session.send('Browser.setDownloadBehavior', {**download_params, 'behavior': 'default'})
+                finally:
+                    download_session.detach()
         self._button(UI["back"]).click()
         return real
 
 
 # ---------------------------------------------------------------- browser
 def _alive(cdp: str) -> bool:
+    if cdp.startswith('ws://'):
+        try:
+            parsed = urllib.parse.urlsplit(cdp)
+            with socket.create_connection((parsed.hostname, parsed.port), timeout=1):
+                return True
+        except (OSError, ValueError, TypeError):
+            return False
     try:
         with urllib.request.urlopen(cdp.rstrip("/") + "/json/version", timeout=2):
             return True
@@ -307,11 +360,51 @@ def _alive(cdp: str) -> bool:
         return False
 
 
+def validate_local_endpoint(endpoint: str) -> None:
+    if endpoint == 'auto':
+        return
+    parsed = urllib.parse.urlsplit(endpoint)
+    if (parsed.scheme not in ('http', 'ws') or parsed.hostname not in ('127.0.0.1', 'localhost')
+            or not parsed.port or parsed.username or parsed.password or parsed.query or parsed.fragment):
+        raise ValueError('ใช้ endpoint ของ Chrome ในเครื่องนี้เท่านั้น หรือ auto')
+
+
+def existing_endpoint(cfg: dict) -> str:
+    endpoint = cfg['cdp']
+    validate_local_endpoint(endpoint)
+    if endpoint != 'auto':
+        return endpoint
+    path = Path(os.environ.get('LOCALAPPDATA', '')) / 'Google' / 'Chrome' / 'User Data' / 'DevToolsActivePort'
+    if not path.is_file():
+        raise ValueError('Chrome เดิมยังไม่เปิด Remote debugging — เปิด chrome://inspect/#remote-debugging ใน Chrome ที่ล็อกอิน Flow แล้วเปิดการเชื่อมต่อ')
+    lines = path.read_text(encoding='utf-8').splitlines()
+    if len(lines) < 2 or not lines[1].startswith('/devtools/browser'):
+        raise ValueError('ข้อมูลการเชื่อมต่อ Chrome ไม่ถูกต้อง')
+    endpoint = f'ws://127.0.0.1:{int(lines[0])}{lines[1].strip()}'
+    validate_local_endpoint(endpoint)
+    return endpoint
+
+
+def browser_available(cfg: dict) -> bool:
+    try:
+        endpoint = existing_endpoint(cfg) if cfg.get('browser_mode') == 'existing' else cfg['cdp']
+        return _alive(endpoint)
+    except (ValueError, OSError):
+        return False
+
+
+def attach(pw, cfg: dict, endpoint: str):
+    return pw.chromium.connect_over_cdp(endpoint, timeout=20000,
+                                        no_defaults=cfg.get('browser_mode') == 'existing')
+
+
 def launch(cfg: dict) -> str:
     """Dedicated Flow Chrome: own profile dir + local debug port → no Allow prompt, never the everyday profiles."""
-    cdp = cfg["cdp"]
+    cdp = existing_endpoint(cfg) if cfg.get('browser_mode') == 'existing' else cfg['cdp']
     if _alive(cdp):
         return cdp
+    if cfg.get('browser_mode') == 'existing':
+        raise ValueError('ยังเชื่อมต่อ Chrome เดิมไม่ได้ เปิด Remote debugging และอนุญาตการเชื่อมต่อใน Chrome ก่อน')
     exe = next((c for c in (cfg.get("chrome"), *CHROMES) if c and Path(c).exists()), None)
     if not exe:
         raise SystemExit("ani: หา chrome.exe ไม่เจอ — ตั้ง provider_config.flow.chrome")
@@ -331,12 +424,14 @@ def _project_page(browser, cfg: dict):
     if not url:
         raise SystemExit("ani: ยังไม่ได้ตั้ง provider_config.flow.project_url — เปิดโปรเจคใน Flow แล้วคัดลอก URL มาใส่")
     pages = [pg for c in browser.contexts for pg in c.pages]
-    page = next((pg for pg in pages if pg.url.startswith(url)), None)
+    page = next((pg for pg in pages if pg.url.split('?')[0].rstrip('/') == url.rstrip('/')), None)
     if page is None:
+        if cfg.get('browser_mode') == 'existing':
+            raise SystemExit('ani: ไม่พบแท็บโปรเจกต์ Flow ใน Chrome เดิม เปิดโปรเจกต์ตาม URL แล้วลองอีกครั้ง')
         page = next((pg for pg in pages if pg.url.startswith(FLOW_HOME)), None) or browser.contexts[0].new_page()
         page.goto(url, wait_until="domcontentloaded")
     try:
-        page.get_by_role("button", name=UI["settings"], exact=True).wait_for(timeout=20000)
+        wait_for_composer(page)
     except Exception:
         raise SystemExit("ani: เปิดหน้าโปรเจค Flow ไม่ขึ้น (ยังไม่ login?) — ให้ user sign in ในหน้าต่าง Chrome ของ Flow "
                          f"(profile {cfg['profile_dir']}) แล้วรันซ้ำ") from None
@@ -352,7 +447,12 @@ def session(cfg: dict):
         from playwright.sync_api import sync_playwright
         pw = sync_playwright().start()
         try:
-            _SESSION = FlowPage(_project_page(pw.chromium.connect_over_cdp(launch(cfg)), cfg), cfg)
+            was_alive = browser_available(cfg)
+            browser = attach(pw, cfg, launch(cfg))
+            if not was_alive and cfg.get('_cookie_store') and cfg.get('browser_mode') != 'existing':
+                import flow_auth
+                flow_auth.restore_cookies(browser.contexts[0], cfg)
+            _SESSION = FlowPage(_project_page(browser, cfg), cfg)
         except BaseException as e:
             pw.stop()
             _SESSION_ERROR = str(e) or type(e).__name__

@@ -14,6 +14,32 @@
   --body: "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif;
 }
 
+.flow-panel { margin: 24px 0; padding: clamp(20px, 3vw, 36px); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.flow-heading { display: flex; justify-content: space-between; gap: 18px; align-items: center; flex-wrap: wrap; }
+.flow-heading h2 { margin: 0; font-size: clamp(21px, 3vw, 30px); }
+.agent-instruction { margin-bottom: 18px; max-width: 850px; line-height: 1.7; }
+#agentMessage { margin: 12px 0 6px; color: var(--paper); }
+.agent-settings { border-top: 1px solid var(--line); padding-top: 15px; }
+.agent-settings > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.agent-settings[open] > summary { margin-bottom: 20px; }
+.agent-policy { padding: 16px 0; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+#agentBudget { width: 110px; margin: 8px 10px 10px 0; padding: 10px; background: var(--ink); color: var(--paper); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.flow-panel p { color: var(--muted); }
+.flow-label { display: block; margin: 16px 0 8px; }
+.flow-panel input[type=url], .flow-panel select { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--ink); color: var(--paper); font: inherit; }
+.flow-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.flow-panel button, .flow-file { padding: 10px 16px; border: 1px solid var(--line); border-radius: 6px; color: var(--paper); background: var(--panel-raised); cursor: pointer; }
+.flow-panel button:disabled { opacity: .45; cursor: wait; }
+.flow-file { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.flow-file input { max-width: 245px; }
+.flow-panel .flow-hint { font-size: 13px; }
+.flow-production { margin-top: 20px; border-top: 1px solid var(--line); }
+#flowMessage { color: var(--accent); min-height: 1.55em; }
+#flowPlan { padding: 16px; margin-top: 18px; border: 1px solid var(--accent); border-radius: 6px; }
+#flowRun { display: block; margin-top: 14px; background: var(--accent); color: var(--ink); }
+#flowJob { margin-top: 20px; }
+#flowJob pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 350px; overflow-y: auto; background: var(--ink); padding: 15px; }
+
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
