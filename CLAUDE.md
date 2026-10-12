@@ -1,0 +1,36 @@
+# ANI — AI short-film pipeline
+
+โฟลเดอร์นี้ผลิตหนังสั้น/อนิเมชัน AI ด้วย `python tools/ani.py` — ค่าแนะนำคือ 9:16, 5 ฉาก × 8 s แต่เรื่องและจำนวนฉากกำหนดใน `project.json`; LLM เขียน manifest + ดูภาพ QC, สคริปต์ทำที่เหลือ
+
+เมื่อ user สั่ง "เรื่องใหม่" ให้สร้าง slug ใหม่ด้วย `python tools/ani.py new <slug>` แล้วเขียนเรื่อง ตัวละคร ฉาก prompt และบทพูดใหม่ใน `<slug>/project.json` ตามคำขอ ห้ามยึดเรื่องหรือตัวละครจากโปรเจกต์เดิม เว้นแต่ user ขอภาคต่อ; สร้างหลายเรื่องใน repo เดียวกันได้
+เอกสาร: `docs/superpowers/specs/2026-09-26-ani-pipeline-design.md` | workflow เต็ม: skill `ani-pipeline`
+
+## Claude Code + MCP
+เมื่อเปิด Claude Code จาก root ของ repo ให้ใช้ server `ani-studio` ใน `.mcp.json` หลังผู้ใช้ยืนยัน trust/อนุมัติ server ครั้งแรก ตรวจสถานะด้วย `/mcp` หรือ `claude mcp get ani-studio` ถ้า server ยังไม่เชื่อมต่อ ให้ใช้ CLI ด้านล่างแทน ไม่ต้องแก้ `.mcp.json` เป็น path เฉพาะเครื่อง
+
+- เรื่องใหม่: เขียนเรื่องใหม่จากโจทย์ครั้งนี้ แล้วเรียก `create_story` พร้อม title, style, characters และ scenes ครบในครั้งเดียว; slug ใหม่ทุกเรื่อง ห้ามดึงเรื่องเก่ามาใช้เอง
+- สรุป: `list_stories` / `get_story`; หน้า UI: `open_dashboard` แล้วส่ง URL localhost ให้ผู้ใช้
+- QC: `mark_scene`; ขั้นที่ไม่ใช้เครดิต: `run_local_stage`; วางแผนภาพ/คลิป: `plan_media`
+- `images` / `clips` ที่อาจเสียเครดิตต้องแสดงฉาก provider และราคาปัจจุบัน ขออนุมัติผู้ใช้ แล้วจึงรันผ่าน CLI; MCP ไม่จ่ายเครดิตแทนผู้ใช้
+
+## คำสั่งหลัก
+```
+python tools/ani.py new <slug>                       # สร้างโปรเจค + template
+python tools/ani.py run --project <slug>             # เดินทุก stage หยุดเมื่อต้อง manual/Flow
+python tools/ani.py <stage> --project <slug> [--scene 03] [--force]
+python tools/ani.py clips --project <slug> [--yes]          # flow: รอบแรกบอกราคา, --yes หลัง user ok (tools/flow.py)
+python tools/ani.py collect clips --project <slug> [--yes]   # ย้ายไฟล์จาก ~/Downloads เข้าฉากที่ขาด
+python tools/ani.py mark 03 clip=redo note="..." --project <slug>
+python tools/test_ani.py
+python tools/ani.py ui                               # หน้าเว็บสรุปทุกเรื่อง + รายละเอียดฉาก (localhost)
+```
+stages: validate → story → images → contact → clips → frames → assemble → vo → music → mix → subs → status
+
+## กติกา
+1. **source of truth = `<slug>/project.json`** — แก้เรื่อง/prompt/บทพูด/provider ที่นั่น แล้วรัน stage ใหม่ ห้ามแก้ storyboard.md/prompts.md ตรง ๆ (ถูก render ทับ)
+2. **ห้ามเขียนคำสั่ง ffmpeg/edge-tts/numpy เอง** — ทุกอย่างอยู่ใน `tools/` ถ้าขาดความสามารถ ให้เพิ่ม option ใน tools + test ไม่ใช่รัน ad hoc
+3. **QC ด้วยภาพเดียว**: ภาพฉาก → `03-images/contact-sheet.jpg`, คลิป → `06-draft/frames-grid.jpg` ห้ามเปิดวิดีโอหรือเฟรมทีละไฟล์ (เปลือง token)
+4. **ก่อนใช้เครดิต Flow/API** list ฉากที่จะ gen + provider + ประมาณเครดิตให้ user เห็นก่อน 1 ครั้ง
+5. **redo รายฉาก** ใช้ `mark <id> image=redo` แล้ว `images --scene <id>` (ไม่ `--force` ทั้งเรื่อง)
+6. **รายงาน = `ani status`** (เขียน `status.md`) ไม่ต้องสรุปซ้ำยาว ๆ; ไฟล์ output ชื่อคงที่ (`06-draft/draft.mp4`, `08-final/final.mp4`)
+7. ไฟล์ media ไม่เข้า git; API key อยู่ใน `ANI/.env` เท่านั้น

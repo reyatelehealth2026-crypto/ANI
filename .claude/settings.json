@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python tools/ani.py:*)",
+      "Bash(python tools/test_ani.py:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(ffprobe:*)"
+    ]
+  }
+}

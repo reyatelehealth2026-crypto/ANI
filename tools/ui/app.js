@@ -1,0 +1,205 @@
+const projectList = document.querySelector("#projectList");
+const projectDetail = document.querySelector("#projectDetail");
+const refreshButton = document.querySelector("#refreshButton");
+
+let projects = [];
+let selectedSlug = null;
+let detailRequest = 0;
+
+const stateNames = {
+  complete: "FINAL พร้อม",
+  review: "ควรตรวจเพิ่ม",
+  production: "กำลังผลิต",
+  planning: "เริ่มต้นเรื่อง",
+  error: "อ่านข้อมูลไม่ได้",
+};
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
+}
+
+function mediaUrl(slug, kind, sceneId) {
+  return `/media/${encodeURIComponent(slug)}/${kind}${sceneId == null ? "" : `/${encodeURIComponent(sceneId)}`}`;
+}
+
+function timecode(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function requestedSlug() {
+  try {
+    return decodeURIComponent(location.hash.slice(1));
+  } catch {
+    return "";
+  }
+}
+
+function stateChip(state) {
+  return `<span class="state-chip ${escapeHtml(state)}">${escapeHtml(stateNames[state] || state)}</span>`;
+}
+
+async function getJson(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
+}
+
+function renderMetrics() {
+  document.querySelector("#projectCount").textContent = projects.length;
+  document.querySelector("#sceneCount").textContent = projects.reduce((sum, project) => sum + project.scene_count, 0);
+  document.querySelector("#clipCount").textContent = projects.reduce((sum, project) => sum + project.clip_count, 0);
+  document.querySelector("#finalCount").textContent = projects.filter(project => project.final).length;
+  document.querySelector("#railCount").textContent = String(projects.length).padStart(2, "0");
+}
+
+function renderProjects() {
+  if (!projects.length) {
+    projectList.innerHTML = `<div class="loading-copy">ยังไม่มีโปรเจกต์<br>เริ่มด้วย <code>python tools/ani.py new my-film</code></div>`;
+    return;
+  }
+  projectList.innerHTML = projects.map(project => `
+    <button class="project-card" type="button" data-slug="${escapeHtml(project.slug)}" aria-current="${project.slug === selectedSlug}">
+      ${project.cover
+        ? `<img class="project-thumb" src="${mediaUrl(project.slug, "cover")}" alt="ภาพประกอบ ${escapeHtml(project.title)}" loading="lazy">`
+        : `<span class="project-thumb thumb-placeholder" aria-hidden="true">✳</span>`}
+      <span class="project-card-copy">
+        <small>${escapeHtml(project.slug)}</small>
+        <strong>${escapeHtml(project.title)}</strong>
+        <span>${project.clip_count}/${project.scene_count} คลิป · ${escapeHtml(stateNames[project.state] || project.state)}</span>
+      </span>
+    </button>`).join("");
+}
+
+function assetBadge(label, exists, qc) {
+  const state = qc === "redo" ? "redo" : exists ? "ready" : "";
+  const detail = qc === "redo" ? "ทำใหม่" : exists ? qc === "pass" ? "ผ่าน QC" : "มีไฟล์" : "ยังไม่มี";
+  return `<span class="asset-badge ${state}">${label}: ${detail}</span>`;
+}
+
+function fileCheck(label, ready, detail = "") {
+  return `<div class="file-check"><span>${escapeHtml(label)}</span><strong class="${ready ? "ready" : "missing"}">${ready ? "● พร้อม" : "○ ยังไม่มี"}${detail ? ` · ${escapeHtml(detail)}` : ""}</strong></div>`;
+}
+
+function renderScene(scene, slug) {
+  const image = scene.image
+    ? `<img src="${mediaUrl(slug, "scene", scene.id)}" alt="ภาพฉาก ${escapeHtml(scene.id)}" loading="lazy">`
+    : `<span class="no-image" aria-label="ยังไม่มีภาพ">${escapeHtml(scene.id)}</span>`;
+  const voice = scene.vo.length
+    ? scene.vo.map(line => `<p class="vo-line"><span class="speaker">${escapeHtml(line.speaker)} · +${escapeHtml(line.offset)}s</span><br>${escapeHtml(line.text)}</p>`).join("")
+    : `<p class="scene-note">ฉากนี้ไม่มีบทพากย์</p>`;
+  const clipLink = scene.clip
+    ? `<a class="scene-link" href="${mediaUrl(slug, "clip", scene.id)}" target="_blank" rel="noopener">เปิดคลิปฉาก ${escapeHtml(scene.id)} ↗</a>`
+    : "";
+  return `<article class="scene-card">
+    <div class="scene-visual">${image}<span class="frame-label">FRAME ${escapeHtml(scene.id)}</span></div>
+    <div class="scene-body">
+      <div class="scene-top"><span class="scene-index">SCENE ${escapeHtml(scene.id)} · ${escapeHtml(scene.mood || "—")}</span><span class="scene-time">${timecode(scene.start)} — ${timecode(scene.end)}</span></div>
+      <h4>${escapeHtml(scene.title)}</h4>
+      <div class="scene-badges">${assetBadge("ภาพ", scene.image, scene.qc.image)}${assetBadge("คลิป", scene.clip, scene.qc.clip)}</div>
+      ${voice}
+      ${scene.qc.note ? `<p class="scene-note">QC · ${escapeHtml(scene.qc.note)}</p>` : ""}
+      ${clipLink}
+      <details class="prompt-drawer"><summary>ดู image / motion prompt</summary>
+        <h5>IMAGE PROMPT</h5><p>${escapeHtml(scene.image_prompt || "ยังไม่ได้เขียน")}</p>
+        <h5>MOTION PROMPT</h5><p>${escapeHtml(scene.motion_prompt || "ยังไม่ได้เขียน")}</p>
+      </details>
+    </div>
+  </article>`;
+}
+
+function renderDetail(project) {
+  const video = project.final
+    ? `<video controls preload="metadata" playsinline src="${mediaUrl(project.slug, "final")}">เบราว์เซอร์นี้เล่นวิดีโอไม่ได้</video>`
+    : project.cover
+      ? `<img src="${mediaUrl(project.slug, "cover")}" alt="ภาพรวมของ ${escapeHtml(project.title)}">`
+      : `<div class="video-placeholder"><span>◧</span>ยังไม่มี final หรือภาพฉาก</div>`;
+  const finalLinks = project.final
+    ? `<a class="screening-link" href="${mediaUrl(project.slug, "final")}" target="_blank" rel="noopener">เปิด final ↗</a>${project.subs ? ` &nbsp;·&nbsp; <a class="screening-link" href="${mediaUrl(project.slug, "subs")}" target="_blank" rel="noopener">เปิด final พร้อมซับ ↗</a>` : ""}`
+    : "";
+  projectDetail.innerHTML = `
+    <div class="detail-hero">
+      <div class="detail-topline"><p class="eyebrow">PROJECT / ${escapeHtml(project.slug)}</p>${stateChip(project.state)}</div>
+      <h2>${escapeHtml(project.title)}</h2>
+      <div class="slug-line">${escapeHtml(project.slug)}</div>
+      <div class="detail-facts">
+        <span><strong>${project.scene_count}</strong> ฉาก</span><span class="divider">✳</span>
+        <span><strong>${escapeHtml(project.duration)}</strong> วินาที</span><span class="divider">✳</span>
+        <span><strong>${project.image_count}/${project.scene_count}</strong> ภาพ</span><span class="divider">✳</span>
+        <span><strong>${project.clip_count}/${project.scene_count}</strong> คลิป</span>
+      </div>
+      <div class="next-step"><span>NEXT ACTION</span><strong>${escapeHtml(project.next_step)}</strong></div>
+    </div>
+    <div class="feature-grid">
+      <section class="screening-room" aria-labelledby="screeningTitle">
+        <div class="section-heading"><h3 id="screeningTitle">Screening room</h3><span class="section-kicker">01 / OUTPUT</span></div>
+        <div class="video-frame">${video}</div>${finalLinks}
+      </section>
+      <section class="brief-panel" aria-labelledby="briefTitle">
+        <div class="section-heading"><h3 id="briefTitle">Creative brief</h3><span class="section-kicker">02 / SOURCE</span></div>
+        <div class="provider-strip">${["image", "video", "tts", "music"].map(kind => `<div class="provider-cell"><span>${kind.toUpperCase()} PROVIDER</span><strong>${escapeHtml(project.providers[kind])}</strong></div>`).join("")}</div>
+        <div class="file-checks">
+          ${fileCheck("Draft", project.draft)}
+          ${fileCheck("เสียงพากย์", project.voice_count === project.voice_total, `${project.voice_count}/${project.voice_total} ไฟล์`)}
+          ${fileCheck("เพลง", project.music)}
+          ${fileCheck("ไฟล์ซับ", project.subtitle_file)}
+          ${fileCheck("Final", project.final)}
+        </div>
+        <div class="brief-block"><h4>Visual style</h4><p>${escapeHtml(project.style || "ยังไม่ได้กำหนด")}</p></div>
+        <div class="brief-block"><h4>Characters</h4><p>${escapeHtml(project.characters || "ยังไม่ได้กำหนด")}</p></div>
+        <div class="brief-block"><h4>Output format</h4><p>${escapeHtml(project.video.width || "—")} × ${escapeHtml(project.video.height || "—")} · ${escapeHtml(project.video.fps || "—")} fps · ${escapeHtml(project.video.aspect || "—")}</p></div>
+      </section>
+    </div>
+    <section class="scenes-section" aria-labelledby="sceneTitle">
+      <div class="section-heading"><h3 id="sceneTitle">ลำดับฉาก</h3><span class="section-kicker">03 / STORYBOARD · ${project.scene_count} SCENES</span></div>
+      <div class="scenes-list">${project.scenes.length ? project.scenes.map(scene => renderScene(scene, project.slug)).join("") : `<div class="detail-empty">ยังไม่มีฉากใน project.json</div>`}</div>
+    </section>`;
+}
+
+async function selectProject(slug, changeHash = true) {
+  selectedSlug = slug;
+  renderProjects();
+  if (changeHash) history.replaceState(null, "", `#${encodeURIComponent(slug)}`);
+  const request = ++detailRequest;
+  projectDetail.innerHTML = `<div class="detail-empty"><span class="empty-symbol">✳</span><p>กำลังอ่านรายละเอียด…</p></div>`;
+  try {
+    const detail = await getJson(`/api/projects/${encodeURIComponent(slug)}`);
+    if (request === detailRequest) renderDetail(detail);
+  } catch (error) {
+    if (request === detailRequest) projectDetail.innerHTML = `<div class="detail-empty"><h2>เปิดโปรเจกต์ไม่ได้</h2><p>${escapeHtml(error.message)}</p></div>`;
+  }
+}
+
+async function refresh() {
+  refreshButton.disabled = true;
+  try {
+    projects = await getJson("/api/projects");
+    const requested = requestedSlug();
+    const slug = projects.some(project => project.slug === requested) ? requested : projects[0]?.slug;
+    selectedSlug = slug || null;
+    renderMetrics();
+    renderProjects();
+    if (slug) await selectProject(slug, false);
+    else projectDetail.innerHTML = `<div class="detail-empty"><span class="empty-symbol">✳</span><h2>ยังไม่มีเรื่องในคลัง</h2><p>เริ่มด้วย <code>python tools/ani.py new my-film</code> แล้วรีเฟรชหน้านี้</p></div>`;
+  } catch (error) {
+    projectList.innerHTML = `<p class="loading-copy">อ่านข้อมูลไม่ได้: ${escapeHtml(error.message)}</p>`;
+    projectDetail.innerHTML = `<div class="detail-empty"><h2>เชื่อมต่อ UI ไม่ได้</h2><p>${escapeHtml(error.message)}</p></div>`;
+  } finally {
+    refreshButton.disabled = false;
+  }
+}
+
+projectList.addEventListener("click", event => {
+  const card = event.target.closest("[data-slug]");
+  if (card) selectProject(card.dataset.slug);
+});
+refreshButton.addEventListener("click", refresh);
+window.addEventListener("hashchange", () => {
+  const slug = requestedSlug();
+  if (projects.some(project => project.slug === slug)) selectProject(slug, false);
+});
+
+refresh();

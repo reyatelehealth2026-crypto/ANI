@@ -1,0 +1,23 @@
+{
+  "name": "ani",
+  "version": "0.1.0",
+  "description": "Create independent short-film stories and inspect production progress with local MCP tools and a visual dashboard.",
+  "author": {
+    "name": "ANI contributors"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ANI Studio",
+    "shortDescription": "Create and track AI short films",
+    "longDescription": "Turn each new story request into a separate project, review scenes and assets, and open a local production dashboard.",
+    "developerName": "ANI contributors",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write", "Interactive"],
+    "defaultPrompt": [
+      "สร้างหนังสั้นเรื่องใหม่จากไอเดียของฉัน",
+      "สรุปสถานะหนังทุกเรื่องและเปิดหน้า dashboard"
+    ],
+    "brandColor": "#B85C38"
+  }
+}

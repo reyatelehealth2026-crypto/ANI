@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ani-studio": {
+      "command": "python",
+      "args": ["tools/mcp_server.py"],
+      "cwd": ".",
+      "startup_timeout_sec": 30,
+      "tool_timeout_sec": 3600,
+      "timeout": 3600000
+    }
+  }
+}

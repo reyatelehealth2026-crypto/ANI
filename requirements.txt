@@ -1,0 +1,6 @@
+numpy
+scipy
+Pillow
+edge-tts
+playwright
+fastmcp>=3,<4
