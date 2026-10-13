@@ -113,7 +113,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 /plugin install ani@ani
 ```
 
-หรือจาก clone ในเครื่อง: `claude plugin marketplace add C:\path\to\ANI` แล้ว `claude plugin install ani@ani` ปลั๊กอินมี MCP `ani-studio` และ skill `ani-studio`
+หรือจาก clone ในเครื่อง: `claude plugin marketplace add C:\path\to\ANI` แล้ว `claude plugin install ani@ani` ปลั๊กอินมี MCP `ani-studio`, skill `ani-studio` (ภาพใน ChatGPT + คลิปใน Google Flow ผ่าน Claude in Chrome) และ skill ตัดต่อ `video-editing` / `remotion-video-creation` (จาก everything-claude-code, MIT — `skills/LICENSE-ECC`)
 
 เรื่องทั้งหมดเก็บที่ `ANI_ROOT` — ตั้ง environment variable `ANI_ROOT` ชี้ไปที่ clone นี้ (แนะนำ: ใช้ `.venv` ของ clone ได้เลยและเห็นเรื่องเดิม) ถ้าไม่ตั้ง ปลั๊กอินจะใช้ `~/ANI` เพื่อไม่ให้ไฟล์หายตอนอัปเดตปลั๊กอิน Python ที่รัน server ต้องมี `requirements.txt` — server หา `.venv` ใน clone หรือใน `ANI_ROOT` ให้เองถ้า `python` บน PATH ยังไม่มี `fastmcp`
 
